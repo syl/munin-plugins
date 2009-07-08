@@ -1,0 +1,66 @@
+#!/bin/sh
+#
+# This script is highly experimental and dirty.
+# It is  provided without any warranty.
+#
+# This piece of script is licensed under the 2-clause BSD license.
+#
+# Example for running 'ps' inside of JAIL ID 1
+# ln -s /usr/local/share/munin/plugins/jailps_ /usr/local/etc/munin/plugins/jailps_1
+#
+# Define the process(es) you want to monitor in plugin-conf.d/plugins.conf
+# [jailps*]
+# user root
+# group wheel
+# env.psNames syslogd httpd cron master qmgr 
+
+JAILID=`basename $0 | sed 's/^jailps_//g'`
+JEXEC_BIN="/usr/sbin/jexec"
+
+if [ "$1" = "autoconf" ]; then
+        if [ -x /usr/sbin/jexec ]; then
+                echo yes
+                exit 0
+        else
+                echo no
+                exit 1
+        fi
+fi
+
+if [ "$1" = "config" ]; then
+
+        echo "graph_title Memory usage for JID $JAILID"
+        echo 'graph_args --base 1000'
+        echo 'graph_vlabel Processes'
+        echo 'graph_category system'
+
+        for psName in $psNames; do
+                psValueRes=`$JEXEC_BIN $JAILID ps auxww | grep $psName | grep -v grep | sed -E 's/[ ]{1,}/ /g' | /usr/bin/cut -d ' ' -f 6 | /usr/bin/awk '{ total = total + $1 } END { print total }'`
+
+                if [ -z $psValueRes ]; then
+                        echo -n
+                else
+                        echo $psName"res.label $psName memory consumption "
+                        echo $psName"res.draw LINE2"
+                        echo $psName"res.info Processes running in Jail with JID $JAILID"
+                        echo $psName"size.label $psName size in memory"
+                        echo $psName"size.draw LINE2"
+                        echo $psName"size.info Processes running in Jail with JID $JAILID"
+                fi
+        done
+        exit 0
+fi
+
+for psName in $psNames; do
+        psValueRes=`$JEXEC_BIN $JAILID ps auxww | grep $psName | grep -v grep | sed -E 's/[ ]{1,}/ /g' | /usr/bin/cut -d ' ' -f 6 | /usr/bin/awk '{ total = total + $1 } END { print total }'`
+        psValueSize=`$JEXEC_BIN $JAILID ps auxww | grep $psName | grep -v grep | sed -E 's/[ ]{1,}/ /g' | /usr/bin/cut -d ' ' -f 5 | /usr/bin/awk '{ total = total + $1 } END { print total }'`
+
+        if [ -z $psValueRes ]; then
+                echo -n
+        else
+                echo -n $psName"res.value "
+                echo $psValueRes
+                echo -n $psName"size.value "
+                echo $psValueSize
+        fi
+done 
